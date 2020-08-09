@@ -6,16 +6,23 @@
 
 use strict;
 use warnings;
+use feature qw(say signatures);
+no warnings qw(experimental::signatures);
+
 use English qw(-no_match_vars);
 
 use Mac::PropertyList;
+use Path::Class;
 
 # Sanity-check: make sure we're givne a reasonable-looking file.
-my $file = shift or die "Syntax: $PROGRAM_NAME <file>\n";
--e $file or die "No such file $file";
-my $data = Mac::PropertyList::parse_plist_file($file)
+my $filename = shift or die "Syntax: $PROGRAM_NAME <file>\n";
+-e $filename or die "No such file $filename";
+my $dir = Path::Class::file($filename)->parent->absolute;
+$dir->resolve;
+my $data = Mac::PropertyList::parse_plist_file($filename)
     or die "Couldn't parse project: $OS_ERROR";
-my $project_dir = $file =~ s{ [.]tmproj }{.tm2proj}xr || $file . '.tm2proj';
+my $project_dir
+    = $filename =~ s{ [.]tmproj }{.tm2proj}xr || $filename . '.tm2proj';
 if (!-e $project_dir) {
     mkdir($project_dir) or die "Couldn't create $project_dir: $OS_ERROR";
 }
@@ -23,16 +30,27 @@ if (!-e $project_dir) {
 # Find the documents.
 my $documents = $data->{documents}->as_perl;
 my $num_documents = scalar @$documents;
+my $format = '%0' . length($num_documents) . 'd ';
+my $generate_prefix = sub ($num) {
+    sprintf($format, $num);
+};
+my $num;
 for my $document (@$documents) {
-    my ($leafname, $true_path);
+    # Work out what we're symlinking to as what.
+    my ($leafname, $relative_path);
     if ($document->{filename}) {
-        $true_path = $document->{filename};
+        $relative_path = $document->{filename};
         ($leafname) = ($document->{filename} =~ m{ / ( [^/]+ ) $}x);
     } elsif ($document->{sourceDirectory}) {
-        $true_path = $document->{sourceDirectory};
+        $relative_path = $document->{sourceDirectory};
         $leafname = $document->{name};
     }
-    print "$leafname: $true_path\n";
+
+    # Generate a name for this symlink.
+    ### TODO: do this nicer.
+    my $true_path = $dir->file($relative_path);
+    symlink($true_path,
+        $project_dir . '/' . $generate_prefix->($num++) . $leafname);
 }
 
 __DATA__
