@@ -6,7 +6,7 @@
 
 use strict;
 use warnings;
-use feature qw(say signatures);
+use feature qw(say signatures unicode_strings);
 no warnings qw(experimental::signatures);
 
 use English qw(-no_match_vars);
@@ -33,10 +33,25 @@ my $documents = $data->{documents}->as_perl;
 my $num_documents = scalar @$documents;
 
 # Prepare to generate filenames that will be sorted asciibetically.
-my $format = '%0' . length($num_documents) . 'd ';
+# Use subscript numbers as they're less obtrusive than normal numbers.
+# (Mac OS doesn't have a superscript 2 or 3, otherwise I'd have used those.)
+my @innocuous_characters = map { chr($_) } 0x2080 .. 0x2089;
+my $max_length;
 my $generate_prefix = sub ($num) {
-    sprintf($format, $num);
+    my $unicode_output = '';
+    while ($num > 0) {
+        my $digit_value = $num % @innocuous_characters;
+        $unicode_output
+            = $innocuous_characters[$digit_value] . $unicode_output;
+        $num = int($num / @innocuous_characters);
+    }
+    while (defined $max_length && length($unicode_output) < $max_length) {
+        $unicode_output = $innocuous_characters[0] . $unicode_output;
+    }
+    
+    return $unicode_output . ' ';
 };
+$max_length = length($generate_prefix->($num_documents));
 
 # Generate symlinks. This may involve creating empty directories; if so,
 # prepare to symlink their contents subsequently.
