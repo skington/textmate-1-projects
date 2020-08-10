@@ -34,23 +34,28 @@ my $format = '%0' . length($num_documents) . 'd ';
 my $generate_prefix = sub ($num) {
     sprintf($format, $num);
 };
+
+# Generate symlinks.
 my $num;
 for my $document (@$documents) {
-    # Work out what we're symlinking to as what.
-    my ($leafname, $relative_path);
+    my $path_prefix = $project_dir . '/' . $generate_prefix->($num++);
     if ($document->{filename}) {
-        $relative_path = $document->{filename};
-        ($leafname) = ($document->{filename} =~ m{ / ( [^/]+ ) $}x);
-    } elsif ($document->{sourceDirectory}) {
-        $relative_path = $document->{sourceDirectory};
-        $leafname = $document->{name};
+        my ($leafname) = ($document->{filename} =~ m{ / ( [^/]+ ) $}x);
+        my $true_path = $dir->file($document->{filename});
+        symlink($true_path, $path_prefix . $leafname);
+    } elsif (my $source_dir_name = $document->{sourceDirectory}) {
+        my $symlink_dir_name = $path_prefix . $document->{name};
+        mkdir($symlink_dir_name);
+        my $source_dir = $dir->subdir($source_dir_name);
+        opendir(my $dh, $source_dir)
+            or die "Couldn't read source directory $source_dir: $OS_ERROR";
+        file:
+        while (my $file = readdir($dh)) {
+            next file if $file =~ /^[.]/;
+            symlink($source_dir->file($file), $symlink_dir_name . '/' . $file)
+                or die "Couldn't create symlink: $OS_ERROR";
+        }
     }
-
-    # Generate a name for this symlink.
-    ### TODO: do this nicer.
-    my $true_path = $dir->file($relative_path);
-    symlink($true_path,
-        $project_dir . '/' . $generate_prefix->($num++) . $leafname);
 }
 
 __DATA__
