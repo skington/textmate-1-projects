@@ -31,6 +31,8 @@ if (!-e $project_dir) {
 # Find the documents.
 my $documents = $data->{documents}->as_perl;
 my $num_documents = scalar @$documents;
+
+# Prepare to generate filenames that will be sorted asciibetically.
 my $format = '%0' . length($num_documents) . 'd ';
 my $generate_prefix = sub ($num) {
     sprintf($format, $num);
