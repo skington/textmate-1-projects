@@ -11,6 +11,7 @@ no warnings qw(experimental::signatures);
 
 use English qw(-no_match_vars);
 
+use Carp;
 use Mac::PropertyList;
 use Path::Class;
 
@@ -35,8 +36,10 @@ my $generate_prefix = sub ($num) {
     sprintf($format, $num);
 };
 
-# Generate symlinks.
+# Generate symlinks. This may involve creating empty directories; if so,
+# prepare to symlink their contents subsequently.
 my $num;
+my @dirs_to_symlink;
 for my $document (@$documents) {
     my $path_prefix = $project_dir . '/' . $generate_prefix->($num++);
     if ($document->{filename}) {
@@ -45,18 +48,39 @@ for my $document (@$documents) {
         symlink($true_path, $path_prefix . $leafname);
     } elsif (my $source_dir_name = $document->{sourceDirectory}) {
         my $symlink_dir_name = $path_prefix . $document->{name};
-        mkdir($symlink_dir_name);
-        my $source_dir = $dir->subdir($source_dir_name);
-        opendir(my $dh, $source_dir)
-            or die "Couldn't read source directory $source_dir: $OS_ERROR";
-        file:
-        while (my $file = readdir($dh)) {
-            next file if $file =~ /^[.]/;
-            symlink($source_dir->file($file), $symlink_dir_name . '/' . $file)
+        push @dirs_to_symlink,
+            {
+            source      => $dir->subdir($source_dir_name),
+            destination => $symlink_dir_name,
+            };
+    }
+}
+
+while (my $dir_spec = shift @dirs_to_symlink) {
+    mkdir($dir_spec->{destination})
+        or die "Couldn't create $dir_spec->{destination}: $OS_ERROR";
+    my $source_dir = Path::Class::dir($dir_spec->{source});
+    opendir(my $dh, $source_dir)
+        or die "Couldn't read source directory $source_dir: $OS_ERROR";
+    file:
+    while (my $filename = readdir($dh)) {
+        next file if $filename =~ /^[.]/;
+        my $orig_file = $source_dir->file($filename);
+        if (-f $orig_file) {
+            symlink($orig_file,
+                $dir_spec->{destination} . '/' . $filename)
                 or die "Couldn't create symlink: $OS_ERROR";
+        } elsif (-d $orig_file) {
+            push (@dirs_to_symlink, {
+                source => $orig_file,
+                destination => $dir_spec->{destination} . '/' . $filename
+            });
+        } else {
+            croak "You fucked up with $orig_file";
         }
     }
 }
+
 
 __DATA__
 use Data::Dumper;
