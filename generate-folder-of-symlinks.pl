@@ -56,6 +56,8 @@ for my $document (@$documents) {
     }
 }
 
+# Go through the directories we needed to create in our destination directory,
+# and create symlinks of the appropriate files.
 while (my $dir_spec = shift @dirs_to_symlink) {
     mkdir($dir_spec->{destination})
         or die "Couldn't create $dir_spec->{destination}: $OS_ERROR";
